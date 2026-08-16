@@ -1,9 +1,7 @@
-import { useState, useRef } from "react";
-import {
-  uploadVideo,
-  calculateFileHash,
-  formatFileSize,
-} from "../services/api";
+import { useRef, useState } from "react";
+import { uploadVideo, calculateFileHash, formatFileSize } from "../services/api";
+
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
 const VideoUpload = ({ onAnalysisComplete }) => {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -12,16 +10,16 @@ const VideoUpload = ({ onAnalysisComplete }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef(null);
 
-  const handleFileSelect = async (file) => {
+  const handleFileSelect = (file) => {
     if (!file) return;
 
     if (!file.type.startsWith("video/")) {
-      setError("Please select a valid video file");
+      setError("Please select a valid video file.");
       return;
     }
 
-    if (file.size > 100 * 1024 * 1024) {
-      setError("File size must be less than 100MB");
+    if (file.size > MAX_FILE_SIZE) {
+      setError("File size must be less than 100 MB.");
       return;
     }
 
@@ -36,54 +34,51 @@ const VideoUpload = ({ onAnalysisComplete }) => {
     setError("");
 
     try {
-      const fileHash = await calculateFileHash(selectedFile);
-      const result = await uploadVideo(selectedFile);
+      const [fileHash, response] = await Promise.all([
+        calculateFileHash(selectedFile),
+        uploadVideo(selectedFile),
+      ]);
 
-      // Calculate confidence based on result
-      let confidenceScore;
-      if (result.result === "REAL") {
-        confidenceScore = 95;
-      } else if (result.result === "FAKE") {
-        confidenceScore = 92;
-      } else {
-        confidenceScore = 50;
+      const result = response?.result;
+      if (!result || !result.label) {
+        throw new Error("The analysis server returned an invalid result.");
       }
 
       onAnalysisComplete({
-        result: result.result,
-        confidence: confidenceScore,
+        ...result,
+        result: result.label,
         file: selectedFile,
         fileHash,
         timestamp: new Date(),
       });
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unable to analyze this video.");
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
+  const handleDragOver = (event) => {
+    event.preventDefault();
     setIsDragOver(true);
   };
 
-  const handleDragLeave = () => {
+  const handleDragLeave = (event) => {
+    event.preventDefault();
     setIsDragOver(false);
   };
 
-  const handleDrop = (e) => {
-    e.preventDefault();
+  const handleDrop = (event) => {
+    event.preventDefault();
     setIsDragOver(false);
-    handleFileSelect(e.dataTransfer.files[0]);
+    handleFileSelect(event.dataTransfer.files[0]);
   };
 
-  const handleReset = () => {
+  const handleReset = (event) => {
+    event?.stopPropagation();
     setSelectedFile(null);
     setError("");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   return (
@@ -94,44 +89,58 @@ const VideoUpload = ({ onAnalysisComplete }) => {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            fileInputRef.current?.click();
+          }
+        }}
       >
         <div className="upload-icon">📹</div>
-        <div className="upload-text">Click or drag video here</div>
-        <div className="upload-subtext">Supports MP4, AVI, MOV (Max 100MB)</div>
+        <div className="upload-text">
+          {isDragOver ? "Drop your video here" : "Click or drag video here"}
+        </div>
+        <div className="upload-subtext">
+          Supports MP4, AVI, MOV, MKV, WEBM · Max 100 MB
+        </div>
         <input
           ref={fileInputRef}
           type="file"
           accept="video/*"
-          onChange={(e) => handleFileSelect(e.target.files[0])}
+          onChange={(event) => handleFileSelect(event.target.files?.[0])}
           style={{ display: "none" }}
         />
       </div>
 
       {selectedFile && (
         <div className="file-info">
-          <div className="file-name">{selectedFile.name}</div>
-          <div className="file-size">{formatFileSize(selectedFile.size)}</div>
-          <button className="reset-file-btn" onClick={handleReset}>
+          <div>
+            <div className="file-name">{selectedFile.name}</div>
+            <div className="file-size">{formatFileSize(selectedFile.size)}</div>
+          </div>
+          <button type="button" className="reset-file-btn" onClick={handleReset}>
             Remove
           </button>
         </div>
       )}
 
       {error && (
-        <div className="error-message">
-          <strong>Error:</strong> {error}
+        <div className="error-message" role="alert">
+          <strong>Analysis error:</strong> {error}
         </div>
       )}
 
       {selectedFile && (
         <button
+          type="button"
           className="analyze-btn"
           onClick={handleAnalyze}
           disabled={isAnalyzing}
         >
           {isAnalyzing ? (
             <>
-              <div className="spinner"></div>
+              <div className="spinner" aria-hidden="true" />
               Analyzing video...
             </>
           ) : (
