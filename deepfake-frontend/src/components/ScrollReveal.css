@@ -1,0 +1,23 @@
+.scroll-reveal {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  transform-style: preserve-3d;
+}
+
+.scroll-reveal-text {
+  margin: 0;
+  padding: 0;
+  display: inline-block;
+}
+
+.word {
+  display: inline-block;
+  white-space: pre-wrap;
+  opacity: 0.8;
+  will-change: opacity, filter, transform;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  color: inherit;
+}
